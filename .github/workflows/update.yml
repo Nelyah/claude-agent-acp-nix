@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   update:
@@ -59,15 +58,27 @@ jobs:
 
           sed -i "0,/version = \"[^\"]*\"/s/version = \"[^\"]*\"/version = \"${VERSION}\"/" flake.nix
 
-      - name: Create Pull Request
+      - name: Extract binary for scanning
         if: steps.check.outputs.skip == 'false'
-        uses: peter-evans/create-pull-request@v7
-        with:
-          commit-message: "update claude-agent-acp to v${{ steps.latest.outputs.version }}"
-          title: "update claude-agent-acp to v${{ steps.latest.outputs.version }}"
-          body: |
-            Automated update from v${{ steps.current.outputs.version }} to v${{ steps.latest.outputs.version }}.
+        run: |
+          VERSION="${{ steps.latest.outputs.version }}"
+          mkdir -p scan
+          curl -sL "https://github.com/agentclientprotocol/claude-agent-acp/releases/download/v${VERSION}/claude-agent-acp-linux-x64.tar.gz" | tar xz -C scan
 
-            Release: https://github.com/agentclientprotocol/claude-agent-acp/releases/tag/v${{ steps.latest.outputs.version }}
-          branch: update/claude-agent-acp-v${{ steps.latest.outputs.version }}
-          delete-branch: true
+      - name: Scan for vulnerabilities
+        if: steps.check.outputs.skip == 'false'
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: rootfs
+          scan-ref: scan
+          severity: CRITICAL,HIGH
+          exit-code: 1
+
+      - name: Commit and push
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add flake.nix
+          git commit -m "update claude-agent-acp to v${{ steps.latest.outputs.version }}"
+          git push
