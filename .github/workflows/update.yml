@@ -1,0 +1,73 @@
+name: Update claude-agent-acp
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get latest release version
+        id: latest
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/agentclientprotocol/claude-agent-acp/releases/latest | jq -r .tag_name | sed 's/^v//')
+          echo "version=$LATEST" >> "$GITHUB_OUTPUT"
+
+      - name: Get current version
+        id: current
+        run: |
+          CURRENT=$(grep 'version = "' flake.nix | head -1 | sed 's/.*version = "\(.*\)".*/\1/')
+          echo "version=$CURRENT" >> "$GITHUB_OUTPUT"
+
+      - name: Check if update needed
+        id: check
+        run: |
+          if [ "${{ steps.latest.outputs.version }}" = "${{ steps.current.outputs.version }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update version and hashes
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          VERSION="${{ steps.latest.outputs.version }}"
+          BASE_URL="https://github.com/agentclientprotocol/claude-agent-acp/releases/download/v${VERSION}"
+
+          declare -A ARTIFACTS=(
+            ["x86_64-linux"]="claude-agent-acp-linux-x64.tar.gz"
+            ["aarch64-linux"]="claude-agent-acp-linux-arm64.tar.gz"
+            ["x86_64-darwin"]="claude-agent-acp-darwin-x64.zip"
+            ["aarch64-darwin"]="claude-agent-acp-darwin-arm64.zip"
+          )
+
+          for system in "${!ARTIFACTS[@]}"; do
+            artifact="${ARTIFACTS[$system]}"
+            url="${BASE_URL}/${artifact}"
+            hash=$(curl -sL "$url" | sha256sum | awk '{print $1}')
+            sri="sha256-$(echo "$hash" | xxd -r -p | base64 -w0)"
+            sed -i "/${system}/,/hash =/{s|hash = \"sha256-[^\"]*\"|hash = \"${sri}\"|}" flake.nix
+          done
+
+          sed -i "0,/version = \"[^\"]*\"/s/version = \"[^\"]*\"/version = \"${VERSION}\"/" flake.nix
+
+      - name: Create Pull Request
+        if: steps.check.outputs.skip == 'false'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "update claude-agent-acp to v${{ steps.latest.outputs.version }}"
+          title: "update claude-agent-acp to v${{ steps.latest.outputs.version }}"
+          body: |
+            Automated update from v${{ steps.current.outputs.version }} to v${{ steps.latest.outputs.version }}.
+
+            Release: https://github.com/agentclientprotocol/claude-agent-acp/releases/tag/v${{ steps.latest.outputs.version }}
+          branch: update/claude-agent-acp-v${{ steps.latest.outputs.version }}
+          delete-branch: true
