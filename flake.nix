@@ -7,7 +7,7 @@
 
   outputs = { self, nixpkgs }:
     let
-      version = "0.24.2";
+      version = "0.25.0";
 
       supportedSystems = [
         "x86_64-linux"
@@ -20,22 +20,22 @@
         x86_64-linux = {
           suffix = "linux-x64";
           ext = "tar.gz";
-          hash = "sha256-qGEfVHsUhS41lj3vZ4G+S0CqGARoGG74ITtlb3I2rHQ=";
+          hash = "sha256-KBCBVMZEvAUc/h1/cQGMh39sx+PrwJ5ewwPPxbvv+4k=";
         };
         aarch64-linux = {
           suffix = "linux-arm64";
           ext = "tar.gz";
-          hash = "sha256-L39id2QoBHS9a+r2GKAX/fPMFZHNMyAIbEqdYjLbr3w=";
+          hash = "sha256-IrEMsU7T+QhjJVI0ztNR5hnsSBfqK0gUpg3AtTthhE8=";
         };
         x86_64-darwin = {
           suffix = "darwin-x64";
           ext = "zip";
-          hash = "sha256-dvL7WxxQtr1rpAa9Rvw+PptbLxkNxSh+faH4SO9idtA=";
+          hash = "sha256-GRigCzFozWPWmAj3heT5yQRxWhKCrQKrsKdR0XVDmmk=";
         };
         aarch64-darwin = {
           suffix = "darwin-arm64";
           ext = "zip";
-          hash = "sha256-2H5ds8FTfcEyhzE6CDYXai70aVWaxi6Ug8cqY0par9M=";
+          hash = "sha256-KBCBVMZEvAUc/h1/cQGMh39sx+PrwJ5ewwPPxbvv+4k=";
         };
       };
 
