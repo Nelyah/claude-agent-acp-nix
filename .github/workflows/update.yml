@@ -11,13 +11,21 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -euo pipefail {0}
     steps:
       - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get latest release version
         id: latest
         run: |
-          LATEST=$(curl -s https://api.github.com/repos/agentclientprotocol/claude-agent-acp/releases/latest | jq -r .tag_name | sed 's/^v//')
+          LATEST=$(curl -fsSL https://registry.npmjs.org/@agentclientprotocol/claude-agent-acp/latest | jq -r .version)
+          [[ "$LATEST" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "invalid version: $LATEST" >&2; exit 1; }
           echo "version=$LATEST" >> "$GITHUB_OUTPUT"
 
       - name: Get current version
@@ -39,37 +47,29 @@ jobs:
         if: steps.check.outputs.skip == 'false'
         run: |
           VERSION="${{ steps.latest.outputs.version }}"
-          BASE_URL="https://github.com/agentclientprotocol/claude-agent-acp/releases/download/v${VERSION}"
 
-          declare -A ARTIFACTS=(
-            ["x86_64-linux"]="claude-agent-acp-linux-x64.tar.gz"
-            ["aarch64-linux"]="claude-agent-acp-linux-arm64.tar.gz"
-            ["x86_64-darwin"]="claude-agent-acp-darwin-x64.zip"
-            ["aarch64-darwin"]="claude-agent-acp-darwin-arm64.zip"
-          )
+          SRC_BASE32=$(nix-prefetch-url --unpack "https://github.com/agentclientprotocol/claude-agent-acp/archive/refs/tags/v${VERSION}.tar.gz")
+          SRC_HASH=$(nix hash convert --hash-algo sha256 --to sri "$SRC_BASE32")
+          [[ "$SRC_HASH" =~ ^sha256- ]] || { echo "invalid SRC_HASH: $SRC_HASH" >&2; exit 1; }
 
-          for system in "${!ARTIFACTS[@]}"; do
-            artifact="${ARTIFACTS[$system]}"
-            url="${BASE_URL}/${artifact}"
-            hash=$(curl -sL "$url" | sha256sum | awk '{print $1}')
-            sri="sha256-$(echo "$hash" | xxd -r -p | base64 -w0)"
-            sed -i "/${system}/,/hash =/{s|hash = \"sha256-[^\"]*\"|hash = \"${sri}\"|}" flake.nix
-          done
-
-          sed -i "0,/version = \"[^\"]*\"/s/version = \"[^\"]*\"/version = \"${VERSION}\"/" flake.nix
-
-      - name: Extract binary for scanning
-        if: steps.check.outputs.skip == 'false'
-        run: |
-          VERSION="${{ steps.latest.outputs.version }}"
           mkdir -p scan
-          curl -sL "https://github.com/agentclientprotocol/claude-agent-acp/releases/download/v${VERSION}/claude-agent-acp-linux-x64.tar.gz" | tar xz -C scan
+          curl -fsSL -o scan/package-lock.json "https://raw.githubusercontent.com/agentclientprotocol/claude-agent-acp/v${VERSION}/package-lock.json"
+          NPM_HASH=$(nix run nixpkgs#prefetch-npm-deps -- scan/package-lock.json)
+          [[ "$NPM_HASH" =~ ^sha256- ]] || { echo "invalid NPM_HASH: $NPM_HASH" >&2; exit 1; }
+
+          sed -i "s|^\(      \)version = \"[^\"]*\";|\1version = \"${VERSION}\";|" flake.nix
+          sed -i "s|srcHash = \"[^\"]*\"|srcHash = \"${SRC_HASH}\"|" flake.nix
+          sed -i "s|npmDepsHash = \"[^\"]*\"|npmDepsHash = \"${NPM_HASH}\"|" flake.nix
+
+      - name: Build package
+        if: steps.check.outputs.skip == 'false'
+        run: nix build --print-build-logs
 
       - name: Scan for vulnerabilities
         if: steps.check.outputs.skip == 'false'
         uses: aquasecurity/trivy-action@master
         with:
-          scan-type: rootfs
+          scan-type: fs
           scan-ref: scan
           severity: CRITICAL,HIGH
           exit-code: 1
