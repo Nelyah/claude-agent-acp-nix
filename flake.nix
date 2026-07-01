@@ -7,7 +7,7 @@
 
   outputs = { self, nixpkgs }:
     let
-      version = "0.53.0";
+      version = "0.54.1";
 
       supportedSystems = [
         "x86_64-linux"
@@ -16,8 +16,8 @@
         "aarch64-darwin"
       ];
 
-      srcHash = "sha256-eKYU0BpKq3kXQDtjBoKXl7i8tI2k7ztnm/oemrAuzdA=";
-      npmDepsHash = "sha256-N6xPVZ+GhvBmmNleZdiaYku1erm9ixspcg1/TT7j3Zk=";
+      srcHash = "sha256-Ykwd1/RH9L/wSEJgc2HdhpDiIiE7wH19v/DQgpFKXFI=";
+      npmDepsHash = "sha256-S3bpXFcOW6ZhM7KJ9hVrKIwT4eKg5oqmmloeCx6YnPw=";
 
       mkPackage = pkgs:
         pkgs.buildNpmPackage {
